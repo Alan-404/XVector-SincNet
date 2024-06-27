@@ -2,10 +2,12 @@ import os
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 import json
 import librosa
+from scipy.io import wavfile
 from typing import Optional, List, Dict
+
+MAX_AUDIO_VALUE = 32768
 
 class XVectorSincNetProcessor:
     def __init__(self,
@@ -51,8 +53,12 @@ class XVectorSincNetProcessor:
         return (signal - signal.mean()) / torch.sqrt(signal.var() + 1e-7)
 
     def load_audio(self, path: str):
-        signal, _ = librosa.load(path, sr=self.sampling_rate)
-        signal = torch.tensor(signal)
+        sr, signal = wavfile.read(path)
+        signal = signal / MAX_AUDIO_VALUE
+
+        if sr != self.sampling_rate:
+            signal = librosa.resample(signal, orig_sr=sr, target_sr=self.sampling_rate)
+        
         return signal
     
     def get_num_speakers(self):
