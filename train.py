@@ -64,7 +64,7 @@ def train(rank: int,
           logging: bool = False,
           logging_project: str = "XVector_SincNet",
           logging_name: Optional[str] = None
-        ):
+        ) -> None:
     if world_size > 1:
         setup(rank, world_size)
     if rank == 0:
@@ -196,7 +196,7 @@ def main( # Train Config
           # Logging config
           logging: bool = False,
           logging_project: str = "XVector-SincNet",
-          logging_name: Optional[str] = None):
+          logging_name: Optional[str] = None) -> None:
     
     n_gpus = torch.cuda.device_count()
     

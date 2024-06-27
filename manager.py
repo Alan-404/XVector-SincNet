@@ -6,7 +6,7 @@ from torch.nn import Module
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 
-from typing import Optional
+from typing import Optional, Tuple
 
 class CheckpointManager:
     def __init__(self, saved_folder: Optional[str] = None, n_saved: int = 3) -> None:
@@ -17,7 +17,7 @@ class CheckpointManager:
         self.n_saved = n_saved
         self.saved_checkpoints = []
 
-    def save_checkpoint(self, model: Module, optimizer: Optimizer, scheduler: LRScheduler, n_steps: int, n_epochs: int):
+    def save_checkpoint(self, model: Module, optimizer: Optimizer, scheduler: LRScheduler, n_steps: int, n_epochs: int) -> None:
         checkpoint = {
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
@@ -33,7 +33,7 @@ class CheckpointManager:
         torch.save(checkpoint, f"{self.saved_folder}/{n_steps}.pt")
         self.saved_checkpoints.append(n_steps)
 
-    def load_checkpoint(self, path: str, model: Module, optimizer: Optimizer, scheduler: LRScheduler):
+    def load_checkpoint(self, path: str, model: Module, optimizer: Optimizer, scheduler: LRScheduler) -> Tuple[int, int]:
         checkpoint = torch.load(path, map_location='cpu')
 
         model.load_state_dict(checkpoint['model'])

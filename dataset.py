@@ -20,7 +20,7 @@ class XVectorSincNetDataset(Dataset):
         self.processor = processor
         self.training = training
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.prompts)
     
     def __getitem__(self, index: int) -> Tuple[torch.Tensor]:

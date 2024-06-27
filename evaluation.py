@@ -5,7 +5,7 @@ import numpy as np
 from scipy.spatial.distance import cosine
 from sklearn.metrics import roc_curve
 
-from typing import Union
+from typing import Union, Tuple
 
 class XVectorSincNetCriterion:
     def __init__(self, n_speakers: int, embedding_size: int, margin: float = 28.6, scale: int = 64,) -> None:
@@ -33,7 +33,7 @@ class XVectorSincNetMetric:
         distance = self.cosine_distance_score(preds, labels)
         return 1 - distance
     
-    def equal_error_rate_score(self, scores: np.ndarray, labels: np.ndarray, type_score: str = 'similarity'):
+    def equal_error_rate_score(self, scores: np.ndarray, labels: np.ndarray, type_score: str = 'similarity') -> Tuple[float, float, float, float]:
         if type_score == 'distance':
             scores = -scores
 
