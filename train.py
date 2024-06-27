@@ -107,10 +107,13 @@ def train(rank: int,
     scaler = GradScaler(enabled=fp16)
 
     for epoch in range(num_epochs):
+        if rank == 0:
+            print(f"Epoch {epoch + 1}")
+        
         train_losses = []
 
         model.train()
-        for (x, y) in tqdm(train_dataloader):
+        for (x, y) in tqdm(train_dataloader, leave=False):
             with autocast(enabled=fp16):
                 outputs = model(x)
             loss = criterion.addictive_softmax_margin_loss(outputs, y)
@@ -122,6 +125,19 @@ def train(rank: int,
 
             train_losses.append(loss.item())
             n_steps += 1
+        
+        if is_validation:
+            val_losses = []
+
+            model.eval()
+            print("Validating")
+            for (x, y) in tqdm(val_dataloader, leave=False):
+                with torch.no_grad():
+                    with autocast(enabled=fp16):
+                        outputs = model(x)
+                loss = criterion.addictive_softmax_margin_loss(outputs, y).item()
+                val_losses.append(loss)
+                
 
         n_epochs += 1
         scheduler.step()
@@ -131,13 +147,21 @@ def train(rank: int,
             current_lr = optimizer.param_groups[0]['lr']
 
             print(f'Train Loss: {(train_loss):.4f}')
-            print(f"Current Learning Rate: {(current_lr)}")
+
+            if is_validation:
+                val_loss = statistics.mean(val_losses)
+                print(f"Val Loss: {(val_loss):.4f}")
+                wandb.log({'val_loss': val_loss}, n_steps)
 
             if logging:
                 wandb.log({
                     'train_loss': train_loss,
                     'learning_rate': current_lr
                 }, n_steps)
+                
+
+            print(f"Current Learning Rate: {(current_lr)}")
+            print("\n")
 
             if epoch % save_checkpoints_after_epoch == save_checkpoints_after_epoch - 1 or epoch == num_epochs - 1:
                 checkpoint_manager.save_checkpoint(model, optimizer, scheduler, n_steps, n_epochs)
