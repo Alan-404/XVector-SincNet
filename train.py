@@ -23,6 +23,8 @@ import statistics
 from typing import Optional
 import fire
 
+import wandb
+
 def setup(rank: int, world_size: int):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = 12355
@@ -57,8 +59,21 @@ def train(rank: int,
           # Model Config
           embedding_dim: int = 512,
           # 
-          weight_path: Optional[str] = None
+          weight_path: Optional[str] = None,
+          # Logging config
+          logging: bool = False,
+          logging_project: str = "XVector_SincNet",
+          logging_name: Optional[str] = None
         ):
+    if world_size > 1:
+        setup(rank, world_size)
+    if rank == 0:
+        if logging:
+            wandb.init(
+                project=logging_project,
+                name=logging_name
+            )
+
     processor = XVectorSincNetProcessor(sampling_rate=sampling_rate, speaker_path=speaker_config_path)
     model = XVectorSincNet(sample_rate=sampling_rate, dimension=embedding_dim).to(rank)
 
@@ -106,7 +121,6 @@ def train(rank: int,
             n_steps += 1
 
         n_epochs += 1
-
         scheduler.step()
 
         if rank == 0:
@@ -115,6 +129,12 @@ def train(rank: int,
 
             print(f'Train Loss: {(train_loss):.4f}')
             print(f"Current Learning Rate: {(current_lr)}")
+
+            if logging:
+                wandb.log({
+                    'train_loss': train_loss,
+                    'learning_rate': current_lr
+                }, n_steps)
 
             if epoch % save_checkpoints_after_epoch == save_checkpoints_after_epoch - 1 or epoch == num_epochs - 1:
                 checkpoint_manager.save_checkpoint(model, optimizer, scheduler, n_steps, n_epochs)
@@ -145,7 +165,11 @@ def main( # Train Config
           # Model Config
           embedding_dim: int = 512,
           # 
-          weight_path: Optional[str] = None):
+          weight_path: Optional[str] = None,
+          # Logging config
+          logging: bool = False,
+          logging_project: str = "XVector-SincNet",
+          logging_name: Optional[str] = None):
     
     n_gpus = torch.cuda.device_count()
     
@@ -155,7 +179,8 @@ def main( # Train Config
             val_path, val_batch_size, num_val_samples,
             checkpoint, saved_folder, n_saved_checkpoints, save_checkpoints_after_epoch,
             sampling_rate, speaker_config_path, embedding_dim,
-            weight_path
+            weight_path,
+            logging, logging_project, logging_name
         )
     else:
         mp.spawn(
@@ -165,7 +190,8 @@ def main( # Train Config
                 val_path, val_batch_size, num_val_samples,
                 checkpoint, saved_folder, n_saved_checkpoints, save_checkpoints_after_epoch,
                 sampling_rate, speaker_config_path, embedding_dim,
-                weight_path
+                weight_path,
+                logging, logging_project, logging_name
             ),
             nprocs=n_gpus,
             join=True

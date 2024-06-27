@@ -28,6 +28,7 @@ class CheckpointManager:
 
         if len(self.saved_checkpoints) == self.n_saved:
             os.remove(f"{self.saved_folder}/{self.saved_checkpoints[0]}.pt")
+            self.saved_checkpoints.pop(0)
 
         torch.save(checkpoint, f"{self.saved_folder}/{n_steps}.pt")
         self.saved_checkpoints.append(n_steps)

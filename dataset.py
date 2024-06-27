@@ -43,14 +43,14 @@ class XVectorSincNetCollate:
         if self.training:
             signals, speakers = zip(*batch)
 
-            signals = self.processor(signals)
+            signals = self.processor(signals).unsqueeze(1)
             speakers = self.processor.as_target(speakers)
 
             return signals, speakers
         else:
             signals, speakers, ref_signals = zip(*batch)
 
-            signals = self.processor(signals)
+            signals = self.processor(signals).unsqueeze(1)
             speakers = self.processor.as_target(speakers)
             ref_signals = self.processor(ref_signals)
 
