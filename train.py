@@ -58,7 +58,7 @@ def train(rank: int,
           speaker_config_path: Optional[str] = None,
           # Model Config
           embedding_dim: int = 512,
-          # 
+          # (Optional) Pre-trained model
           weight_path: Optional[str] = None,
           # Logging config
           logging: bool = False,
@@ -80,15 +80,18 @@ def train(rank: int,
     if weight_path is not None and os.path.exists(weight_path):
         model.load_state_dict(torch.load(weight_path, map_location='cpu'))
 
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=1000)
+
     checkpoint_manager = CheckpointManager(saved_folder, n_saved_checkpoints)
     if checkpoint is not None and os.path.exists(checkpoint):
         n_steps, n_epochs = checkpoint_manager.load_checkpoint(checkpoint, model, optimizer, scheduler)
-    
+
+    if set_lr:
+        optimizer.param_groups[0]['lr'] = lr
+
     if world_size > 1:
         model = DDP(model, device_ids=[rank])
-
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer=optimizer, T_max=1000)
 
     train_dataset = XVectorSincNetDataset(train_path, processor=processor, training=True, num_examples=num_train_samples)
     train_sampler = DistributedSampler(dataset=train_dataset, num_replicas=world_size, rank=rank) if world_size > 1 else RandomSampler(train_dataset)
@@ -175,23 +178,23 @@ def main( # Train Config
     
     if n_gpus <= 1:
         train(
-            0, n_gpus, train_path, train_batch_size, num_train_samples, n_epochs, fp16, lr, set_lr,
+            0, n_gpus, train_path, train_batch_size, num_train_samples, n_epochs, bool(fp16), lr, bool(set_lr),
             val_path, val_batch_size, num_val_samples,
             checkpoint, saved_folder, n_saved_checkpoints, save_checkpoints_after_epoch,
             sampling_rate, speaker_config_path, embedding_dim,
             weight_path,
-            logging, logging_project, logging_name
+            bool(logging), logging_project, logging_name
         )
     else:
         mp.spawn(
             train, 
             args=(
-                n_gpus, train_path, train_batch_size, num_train_samples, n_epochs, fp16, lr, set_lr,
+                n_gpus, train_path, train_batch_size, num_train_samples, n_epochs, bool(fp16), lr, bool(set_lr),
                 val_path, val_batch_size, num_val_samples,
                 checkpoint, saved_folder, n_saved_checkpoints, save_checkpoints_after_epoch,
                 sampling_rate, speaker_config_path, embedding_dim,
                 weight_path,
-                logging, logging_project, logging_name
+                bool(logging), logging_project, logging_name
             ),
             nprocs=n_gpus,
             join=True
