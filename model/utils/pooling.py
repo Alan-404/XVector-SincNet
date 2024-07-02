@@ -7,24 +7,6 @@ import torch.nn.functional as F
 
 
 def _pool(sequences: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
-    """Helper function to compute statistics pooling
-
-    Assumes that weights are already interpolated to match the number of frames
-    in sequences and that they encode the activation of only one speaker.
-
-    Parameters
-    ----------
-    sequences : (batch, features, frames) torch.Tensor
-        Sequences of features.
-    weights : (batch, frames) torch.Tensor
-        (Already interpolated) weights.
-
-    Returns
-    -------
-    output : (batch, 2 * features) torch.Tensor
-        Concatenation of mean and (unbiased) standard deviation.
-    """
-
     weights = weights.unsqueeze(dim=1)
     # (batch, 1, frames)
 
