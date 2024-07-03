@@ -90,7 +90,7 @@ class InferenceDataset(Dataset):
         audio_1 = self.handle_audio(audio_1, sr_1)
         audio_2 = self.handle_audio(audio_2, sr_2)
 
-        return torch.tensor(audio_1), torch.tensor(audio_2)
+        return torch.FloatTensor(audio_1), torch.FloatTensor(audio_2)
 
 class InferenceCollate:
     def __init__(self) -> None:
@@ -117,4 +117,4 @@ class InferenceCollate:
     def __call__(self, batch: Tuple[List[torch.Tensor], List[torch.Tensor]]):
         audio_1, audio_2 = zip(*batch)
         signals = self.padding(audio_1 + audio_2)
-        return signals
+        return signals.unsqueeze(1)
