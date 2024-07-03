@@ -3,7 +3,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
-from .processing.processor import XVectorSincNetProcessor
+from processing.processor import XVectorSincNetProcessor
 import pandas as pd
 from scipy.io import wavfile
 import librosa
