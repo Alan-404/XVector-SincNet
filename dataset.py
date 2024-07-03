@@ -30,14 +30,14 @@ class XVectorSincNetDataset(Dataset):
     
     def __getitem__(self, index: int) -> Tuple[torch.Tensor]:
         index_df = self.prompts.iloc[index]
-        path = index_df['path']
-        label = index_df['speaker']
-
         if self.training:
+            path = index_df['path']
+            label = index_df['speaker']
             return self.processor.load_audio(path), label
         else:   
-            ref_path = index_df['ref_path']
-            return self.processor.load_audio(path), label, self.processor.load_audio(ref_path)
+            path1 = index_df['path1']
+            path2 = index_df['path2']
+            return self.processor.load_audio(path1), label, self.processor.load_audio(path2)
     
 class XVectorSincNetCollate:
     def __init__(self, processor: XVectorSincNetProcessor, training: bool = False) -> None:
