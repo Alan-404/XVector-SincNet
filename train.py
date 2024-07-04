@@ -103,7 +103,7 @@ def train(rank: int,
         val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=rank) if world_size > 1 else None
         val_dataloader = DataLoader(dataset=val_dataset, batch_size=val_batch_size, shuffle=False, sampler=val_sampler, collate_fn=XVectorSincNetCollate(processor=processor))
 
-    criterion = XVectorSincNetCriterion(n_speakers=processor.get_num_speakers(), embedding_size=embedding_dim)
+    criterion = XVectorSincNetCriterion(n_speakers=train_dataset.num_speakers, embedding_size=embedding_dim)
     scaler = GradScaler(enabled=fp16)
 
     for epoch in range(num_epochs):
