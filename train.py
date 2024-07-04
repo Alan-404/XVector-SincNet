@@ -74,7 +74,7 @@ def train(rank: int,
                 name=logging_name
             )
 
-    processor = XVectorSincNetProcessor(sampling_rate=sampling_rate, speaker_path=speaker_config_path)
+    processor = XVectorSincNetProcessor(sampling_rate=sampling_rate)
     model = XVectorSincNet(sample_rate=sampling_rate, dimension=embedding_dim).to(rank)
 
     if weight_path is not None and os.path.exists(weight_path):
@@ -93,13 +93,13 @@ def train(rank: int,
     if world_size > 1:
         model = DDP(model, device_ids=[rank])
 
-    train_dataset = XVectorSincNetDataset(train_path, processor=processor, training=True, num_examples=num_train_samples)
+    train_dataset = XVectorSincNetDataset(train_path, num_examples=num_train_samples)
     train_sampler = DistributedSampler(dataset=train_dataset, num_replicas=world_size, rank=rank) if world_size > 1 else RandomSampler(train_dataset)
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=train_batch_size, sampler=train_sampler, collate_fn=XVectorSincNetCollate(processor=processor, training=True))
 
     is_validation = val_path is not None and os.path.exists(val_path)
     if is_validation:
-        val_dataset = XVectorSincNetDataset(val_path, processor=processor, training=False, num_examples=num_val_samples)
+        val_dataset = XVectorSincNetDataset(val_path, um_examples=num_val_samples)
         val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=rank) if world_size > 1 else None
         val_dataloader = DataLoader(dataset=val_dataset, batch_size=val_batch_size, shuffle=False, sampler=val_sampler, collate_fn=XVectorSincNetCollate(processor=processor))
 

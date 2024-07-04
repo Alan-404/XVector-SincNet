@@ -2,119 +2,65 @@ import os
 
 import torch
 from torch.utils.data import Dataset
-import torch.nn.functional as F
-from processing.processor import XVectorSincNetProcessor
 import pandas as pd
+
 from scipy.io import wavfile
-import librosa
 import numpy as np
+import librosa
+
+from typing import Optional, List, Tuple
 
 MAX_AUDIO_VALUE = 32768.0
 
-from typing import Optional, Tuple, List, Union
-
 class XVectorSincNetDataset(Dataset):
-    def __init__(self, manifest_path: str, processor: XVectorSincNetProcessor, training: bool = False, num_examples: Optional[int] = None) -> None:
+    def __init__(self, manifest_path: str, sample_rate: int = 16000, max_duration: Optional[int] = None, num_examples: Optional[int] = None) -> None:
         super().__init__()
         assert os.path.exists(manifest_path)
 
         self.prompts = pd.read_csv(manifest_path)
         if num_examples is not None:
             self.prompts = self.prompts[:num_examples]
-
-        self.processor = processor
-        self.training = training
-
-    def __len__(self) -> int:
-        return len(self.prompts)
-    
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor]:
-        index_df = self.prompts.iloc[index]
-        if self.training:
-            path = index_df['path']
-            label = index_df['speaker']
-            return self.processor.load_audio(path), label
-        else:   
-            path1 = index_df['path1']
-            path2 = index_df['path2']
-            return self.processor.load_audio(path1), label, self.processor.load_audio(path2)
-    
-class XVectorSincNetCollate:
-    def __init__(self, processor: XVectorSincNetProcessor, training: bool = False) -> None:
-        self.processor = processor
-        self.training = training
-
-    def __call__(self, batch: Tuple[List[torch.Tensor], List[str]]) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        if self.training:
-            signals, speakers = zip(*batch)
-
-            signals = self.processor(signals).unsqueeze(1)
-            speakers = self.processor.as_target(speakers)
-
-            return signals, speakers
-        else:
-            signals, speakers, ref_signals = zip(*batch)
-
-            signals = self.processor(signals).unsqueeze(1)
-            speakers = self.processor.as_target(speakers)
-            ref_signals = self.processor(ref_signals)
-
-            return signals, speakers, ref_signals
         
-class InferenceDataset(Dataset):
-    def __init__(self, manifest_path: str, sample_rate: int = 16000, num_examples: Optional[int] = None) -> None:
-        super().__init__()
-        self.prompts = pd.read_csv(manifest_path)
-        if num_examples is not None:
-            self.prompts = self.prompts[:num_examples]
+        self.max_length = None
+        if max_duration is not None:
+            self.max_length = max_duration * sample_rate
+        
+        assert isinstance(self.prompts['speaker'].dtype, int)
+        self.num_speakers = self.get_num_speakers()
 
         self.sample_rate = sample_rate
-        
+
     def __len__(self) -> int:
         return len(self.prompts)
     
-    def handle_audio(self, signal: np.ndarray, sr: int) -> np.ndarray:
+    def get_num_speakers(self) -> int:
+        return len(list(set(self.prompts['speaker'].to_list())))
+    
+    def load_audio(self, path: str) -> np.ndarray:
+        sr, signal = wavfile.read(path)
+        signal = signal / MAX_AUDIO_VALUE
         if sr != self.sample_rate:
             signal = librosa.resample(signal, orig_sr=sr, target_sr=self.sample_rate)
-        return signal / MAX_AUDIO_VALUE
+        if self.max_length is not None:
+            signal = signal[:self.max_length]
+        return signal
     
     def __getitem__(self, index: int):
         index_df = self.prompts.iloc[index]
 
-        path1 = index_df['path1']
-        path2 = index_df['path2']
+        path = index_df['path']
+        sid = index_df['speaker']
 
-        sr_1, audio_1 = wavfile.read(path1)
-        sr_2, audio_2 = wavfile.read(path2)
+        signal = torch.FloatTensor(self.load_audio(path))
 
-        audio_1 = self.handle_audio(audio_1, sr_1)
-        audio_2 = self.handle_audio(audio_2, sr_2)
-
-        return torch.FloatTensor(audio_1), torch.FloatTensor(audio_2)
-
-class InferenceCollate:
+        return signal, sid
+    
+class XVectorSincNetCollate:
     def __init__(self) -> None:
         pass
 
-    def padding(self, signals: List[torch.Tensor]) -> torch.Tensor:
-        max_length = 0
-        lengths = []
-
-        for signal in signals:
-            length = len(signal)
-            lengths.append(length)
-            if length > max_length:
-                max_length = length
-        
-        padded_signals = []
-        for index, signal in enumerate(signals):
-            padded_signals.append(
-                F.pad(signal, (0, max_length - lengths[index]), value=0.0)
-            )
-
-        return torch.stack(padded_signals)
-
-    def __call__(self, batch: Tuple[List[torch.Tensor], List[torch.Tensor]]):
-        audio_1, audio_2 = zip(*batch)
-        signals = self.padding(audio_1 + audio_2)
-        return signals.unsqueeze(1)
+    def __call__(self, batch: Tuple[List[torch.Tensor], List[int]]) -> Tuple[torch.Tensor, torch.Tensor]:
+        signals, ids = zip(*batch)
+        signals = torch.nn.utils.rnn.pad_sequence(signals, batch_first=True, padding_value=0.0)
+        ids = torch.tensor(ids)
+        return signals, ids

@@ -1,83 +1,54 @@
-import os
 
 import torch
-import torch.nn.functional as F
-import json
-import librosa
 from scipy.io import wavfile
-from typing import Optional, List, Dict
+import librosa
+import numpy as np
 
-MAX_AUDIO_VALUE = 32768
+from typing import Union, List
+
+MAX_AUDIO_VALUE = 32768.0
 
 class XVectorSincNetProcessor:
-    def __init__(self,
-                 sampling_rate: int = 16000,
-                 speaker_dict: Optional[Dict[str, int]] = None,
-                 speaker_list: Optional[List[str]] = None,
-                 speaker_path: Optional[str] = None
-                ) -> None:
-        self.sampling_rate = sampling_rate
+    def __init__(self, sample_rate: int) -> None:
+        self.sample_rate = sample_rate
 
-        if speaker_dict is not None:
-            self.speaker_dict = speaker_dict
-        elif speaker_list is not None:
-            self.speaker_dict = self.create_dict_by_list(speaker_list)
-        elif speaker_path is not None:
-            self.speaker_dict = self.load_speaker(speaker_path)
-
-        assert max(self.speaker_dict.values()) == len(self.speaker_dict) - 1, "Invalid Speaker Config"
-        self.speaker_list = list(self.speaker_dict.keys())
-
-    def get_speaker_by_id(self, id: int):
-        return self.speaker_list[id]
-
-    def get_id_speaker(self, speaker: str):
-        return self.speaker_list.index(speaker)
-    
-    def create_dict_by_list(self, speakers: List[str]):
-        count = 0
-        dictionary = dict()
-        for speaker in speakers:
-            dictionary[speaker] = count
-            count += 1
-        return dictionary
-    
-    def load_speaker(self, path: str):
-        assert os.path.exists(path), "File is Not Found"
-        assert os.path.isfile(path) and path.lower().endswith(".json"), "Invalid Configuration Speaker File, We need JSON file"
-
-        with open(path, 'r', encoding='utf8') as file:
-            return json.load(file)
-
-    def gaussian_normalize(self, signal: torch.Tensor):
-        return (signal - signal.mean()) / torch.sqrt(signal.var() + 1e-7)
-
-    def load_audio(self, path: str):
+    def load_audio(self, path: str, return_tensor: bool = False) -> Union[np.ndarray, torch.Tensor]:
         sr, signal = wavfile.read(path)
         signal = signal / MAX_AUDIO_VALUE
+        if sr != self.sample_rate:
+            signal = librosa.resample(signal, orig_sr=sr, target_sr=self.sample_rate)
+        return signal if return_tensor == False else torch.tensor(signal)
+    
+    def pad_signals(self, signals: Union[List[np.ndarray], List[torch.Tensor]]) -> Union[np.ndarray, torch.Tensor]:
+        max_length = 0
+        lengths = []
 
-        if sr != self.sampling_rate:
-            signal = librosa.resample(signal, orig_sr=sr, target_sr=self.sampling_rate)
-        
-        return signal
-    
-    def get_num_speakers(self):
-        return len(self.speaker_list)
-    
-    def as_target(self, speakers: List[str]) -> torch.Tensor:
-        items = []
-        for speaker in speakers:
-            items.append(self.get_id_speaker(speaker))
-        
-        return torch.tensor(items)
-    
-    def __call__(self, signals: List[torch.Tensor]) -> torch.Tensor:
-        max_length = torch.max([len(item) for item in signals])
+        is_tensor = None
+
+        for signal in signals:
+            if is_tensor is None:
+                if isinstance(signal, torch.Tensor):
+                    is_tensor = True
+                else:
+                    is_tensor = False
+            length = len(signal)
+            if length > max_length:
+                max_length = length
+            lengths.append(length)
 
         padded_signals = []
-        for item in signals:
-            padded_signals.append(
-                F.pad(item, pad=(0, max_length - len(item)), mode='constant', value=0.)
-            )
+        for index, signal in enumerate(signals):
+            if is_tensor:
+                padded_item = torch.nn.functional.pad(
+                    signal, (0, max_length - lengths[index]), value=0.0
+                )
+            else:
+                padded_item = np.pad(
+                    signal, (0, max_length - lengths[index]), constant_values=0.0
+                )
 
-        return torch.stack(padded_signals)
+            padded_signals.append(padded_item)
+
+        if is_tensor:
+            return torch.stack(padded_signals)
+        return np.arange(padded_signals)
